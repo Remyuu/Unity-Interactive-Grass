@@ -1,0 +1,170 @@
+#define THREADGROUPSIZE 128
+#pragma kernel BendGrass
+
+#define PI2 6.28318530718f
+
+struct GrassInput
+{
+    float3 position;
+    float padding;
+};
+struct GrassOutput
+{
+    float3 position;
+    float height;
+    float width;
+    float4 quaternion;
+    float fade;
+    float2 padding;
+};
+StructuredBuffer<GrassInput> _InputBuffer; // Send From C#
+AppendStructuredBuffer<GrassOutput> _OutputBuffer; // Send to Render
+
+struct IndirectArgs
+{
+    uint numVerticesPerInstance;
+    uint numInstances;
+    uint _3;
+    uint _4;
+    uint _5;
+};
+RWStructuredBuffer<IndirectArgs> _IndirectArgsBuffer; // Instanced Args
+
+StructuredBuffer<uint> _VisibleIDBuffer;
+
+// Variables set by the renderer
+int _NumSourceVertices;
+
+// Camera
+uniform float3 _CameraPositionWS;
+
+// LoD
+float _MinFadeDist, _MaxFadeDist;
+
+// Time
+float time;
+
+// Blade
+float bladeHeight; float bladeHeightOffset;
+float bladeWeight; float bladeWeightOffset;
+float maxBend;
+
+// Wind
+float4 wind;
+
+// trample
+float4 tramplePos[10]; // ASSUME Only 10 max tramples
+// float trampleRadius; // Move to tramplePos[].a
+float trampleStrength;
+float trampleLength;
+
+// ----------------------------------------
+
+// Helper Functions
+
+// 输出一个表示从v1旋转到v2的四元数
+float4 MapVector(float3 v1, float3 v2){
+    v1 = normalize(v1);
+    v2 = normalize(v2);
+    float3 v = v1+v2;
+    v = normalize(v);
+    float4 q = 0;
+    q.w = dot(v, v2);
+    q.xyz = cross(v, v2);
+    return q;
+}
+
+// 四元数旋转组合
+float4 quatMultiply(float4 q1, float4 q2) {
+    return float4(
+        q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y, // X component
+        q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x, // Y component
+        q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w, // Z component
+        q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z  // W (real) component
+    );
+}
+
+// Perlin 随机数算法
+float hash(float x, float y) {
+    return frac(abs(sin(sin(123.321 + x) * (y + 321.123)) * 456.654));
+}
+float perlin(float x, float y){
+    float col = 0.0;
+    for (int i = 0; i < 8; i++) {
+        float fx = floor(x); float fy = floor(y);
+        float cx = ceil(x); float cy = ceil(y);
+        float a = hash(fx, fy); float b = hash(fx, cy);
+        float c = hash(cx, fy); float d = hash(cx, cy);
+        col += lerp(lerp(a, b, frac(y)), lerp(c, d, frac(y)), frac(x));
+        col /= 2.0; x /= 2.0; y /= 2.0;
+    }
+    return col;
+}
+
+// XorShift128 随机数算法 -- Edited 直接输出归一化数据
+uint state[4];
+void xorshift_init(uint s) {
+    state[0] = s; state[1] = s | 0xffff0000u;
+    state[2] = s << 16; state[3] = s >> 16;
+}
+float xorshift128() {
+    uint t = state[3]; uint s = state[0];
+    state[3] = state[2]; state[2] = state[1]; state[1] = s;
+    t ^= t << 11u; t ^= t >> 8u;
+    state[0] = t ^ s ^ (s >> 19u);
+    return (float)state[0] / float(0xffffffffu);
+}
+
+[numthreads(THREADGROUPSIZE,1,1)]
+void BendGrass (uint id : SV_DispatchThreadID)
+{
+    // 由于线程组数量是固定的（128*1*1），如果只渲染17个草，就把多的这个线程在这里return掉
+    if ((int)id >= _NumSourceVertices) return;
+    
+
+    uint usableID = _VisibleIDBuffer[id];
+    GrassInput input = _InputBuffer[usableID];
+    
+    // LoD
+    float distanceFromCamera = distance(input.position, _CameraPositionWS);
+    float distanceFade = 1 - saturate((distanceFromCamera - _MinFadeDist) / (_MaxFadeDist - _MinFadeDist));
+    // skip if out of fading range too ..
+    if (distanceFade < 0.001f) return;
+    
+    // 初始化随机数
+    // xorshift_init(id * 73856093u ^ id * 19349663u ^ id * 83492791u);
+    xorshift_init(usableID * 73856093u ^ usableID * 19349663u ^ usableID * 83492791u);
+    
+    // Trampler
+    float4 qt = float4(0, 0, 0, 1); // 四元数里的1就是这样的，虚部都是0
+    for (int trampleIndex = 0; trampleIndex < trampleLength; trampleIndex++)
+    {
+        float trampleRadius = tramplePos[trampleIndex].a;
+        float3 relativePosition = input.position - tramplePos[trampleIndex].xyz;
+        float dist = length(relativePosition);
+        if (dist < trampleRadius) {
+            // 使用次方增强近距离的效果
+            float eff = pow((trampleRadius - dist) / trampleRadius, 2) * trampleStrength;
+            float3 direction = normalize(relativePosition);
+            float3 newTargetDirection = float3(direction.x * eff, 1, direction.z * eff);
+            qt = quatMultiply(MapVector(float3(0, 1, 0), newTargetDirection), qt);
+        }
+    }
+    
+    // 随机朝向 和 倾倒
+    float2 offset = (input.position.xz + wind.xy * time * wind.z) * wind.w;
+    float noise = (perlin(offset.x, offset.y) * 2 - 1) * maxBend;
+    float4 q1 = MapVector(float3(0,1,0), (float3(wind.x * noise, 1, wind.y * noise)));
+    float randomAngle = PI2 * xorshift128();
+    float4 q2 = MapVector(float3(1,0,0),float3(cos(randomAngle), 0, sin(randomAngle)));
+
+    GrassOutput result;
+    result.position = input.position;
+    result.height = (bladeHeight + bladeHeightOffset * (xorshift128()*2-1)) * distanceFade;
+    result.width = (bladeWeight + bladeWeightOffset * (xorshift128()*2-1)) * distanceFade;
+    result.quaternion = quatMultiply(qt,quatMultiply(q2,q1));
+    result.fade = xorshift128() * distanceFade;
+    result.padding = float2(0,0);
+
+    _OutputBuffer.Append(result);
+}
