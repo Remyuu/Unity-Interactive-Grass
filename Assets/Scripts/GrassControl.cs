@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEditor;
+using UnityEngine.Pool;
 using Random = UnityEngine.Random;
 
 [ExecuteInEditMode]
@@ -168,10 +170,16 @@ public class GrassControl : MonoBehaviour
     private const int SIZE_GRASS_OUTPUT_STRIDE = 12 * sizeof(float);
     private const int INDIRECT_ARGS_STRIDE     =  5 * sizeof(uint);
     private const int VISIBLE_ID_STRIDE        =  1 * sizeof(int);
+    private const int CUT_ID_STRIDE            =  1 * sizeof(float);
     // 第二项会在Compute Shader中动态改变以实现LoD
     private uint[] argsBufferReset = new uint[5] {
         (uint)21, (uint)0, (uint)0, (uint)0, (uint)0
     }; // 当前Blade有7个三角形 3721
+    
+    // added for cutting
+    private ComputeBuffer m_CutBuffer;
+    float[] cutIDs;
+    
     
     // //====================================================================================
     // // 八叉树划分数据
@@ -339,6 +347,12 @@ public class GrassControl : MonoBehaviour
         m_VisibleIDBuffer = new ComputeBuffer(grassData.Count, VISIBLE_ID_STRIDE,
             ComputeBufferType.Structured); //uint only, per visible grass
         m_ComputeShader.SetBuffer(m_ID_GrassKernel, "_VisibleIDBuffer", m_VisibleIDBuffer);
+        
+        // added for cutting
+        m_CutBuffer = new ComputeBuffer(grassData.Count, CUT_ID_STRIDE, ComputeBufferType.Structured);
+        // added for cutting
+        m_ComputeShader.SetBuffer(m_ID_GrassKernel, "_CutBuffer", m_CutBuffer);
+        
     }
     
     private void UpdateGrassMaterial()
@@ -353,6 +367,14 @@ public class GrassControl : MonoBehaviour
         // 预计算一些下面会用到的量
         Vector4 wind = new Vector4(Mathf.Cos(windDirection * Mathf.PI / 180), 
             Mathf.Sin(windDirection * Mathf.PI / 180), windSpeed, windScale);
+        
+        // added for cutting
+        cutIDs = new float[grassData.Count];
+
+        for (int i = 0; i < cutIDs.Length; i++)
+        {
+            cutIDs[i] = -1;
+        }
         // 初始化那些运行时不需要每一帧都修改的变量
         // Trample
         
@@ -374,6 +396,7 @@ public class GrassControl : MonoBehaviour
         
         m_Material.SetVector("_AABB",new Vector4(m_LocalBounds.center.x, m_LocalBounds.center.y, m_LocalBounds.center.z, 0f));
 
+        m_CutBuffer.SetData(cutIDs);
     }
 
     private void SetGrassDataUpdate()
@@ -476,6 +499,8 @@ public class GrassControl : MonoBehaviour
             m_argsBuffer?.Release();
             m_OutputBuffer?.Release();
             m_VisibleIDBuffer?.Release();
+            // added for cutting
+            m_CutBuffer?.Release();
         }
         m_Initialized = false;
     }
@@ -559,7 +584,60 @@ public class GrassControl : MonoBehaviour
             Gizmos.DrawWireCube(BoundsListVis[i].center, BoundsListVis[i].size);
         }
     }
+    
+    
+    
+    
+    
+    
+    // newly added for cutting
+    public void UpdateCutBuffer(Vector3 hitPoint, float radius)
+    {
+        // can't cut grass if there is no grass in the scene
+        if (grassData.Count > 0)
+        {
+            List<int> grasslist = new List<int>();
+            // Get the list of IDS that are near the hitpoint within the radius
+            cullingTree.ReturnLeafList(hitPoint, grasslist, radius);
+            Vector3 brushPosition = this.transform.position;
+            // Compute the squared radius to avoid square root calculations
+            float squaredRadius = radius * radius;
+
+            for (int i = 0; i < grasslist.Count; i++)
+            {
+                int currentIndex = grasslist[i];
+                Vector3 grassPosition = grassData[currentIndex].position + brushPosition;
+
+                // Calculate the squared distance
+                float squaredDistance = (hitPoint - grassPosition).sqrMagnitude;
+
+                // Check if the squared distance is within the squared radius
+                // Check if there is grass to cut, or of the grass is uncut(-1)
+                if (squaredDistance <= squaredRadius && (cutIDs[currentIndex] > hitPoint.y || cutIDs[currentIndex] == -1))
+                {
+                    // store cutting point
+                    cutIDs[currentIndex] = hitPoint.y;
+                }
+
+            }
+        }
+        m_CutBuffer.SetData(cutIDs);
+    }
+
+
+
+    // If the pool capacity is reached then any items returned will be destroyed.
+    // We can control what the destroy behavior does, here we destroy the GameObject.
+    void OnDestroyPoolObject(ParticleSystem system)
+    {
+        Destroy(system.gameObject);
+    }
 }
+    
+    
+    
+    
+
 
 [System.Serializable]
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind

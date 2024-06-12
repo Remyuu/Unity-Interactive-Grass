@@ -32,6 +32,8 @@ RWStructuredBuffer<IndirectArgs> _IndirectArgsBuffer; // Instanced Args
 
 StructuredBuffer<uint> _VisibleIDBuffer;
 
+StructuredBuffer<float> _CutBuffer;// added for cutting
+
 // Variables set by the renderer
 int _NumSourceVertices;
 
@@ -124,6 +126,8 @@ void BendGrass (uint id : SV_DispatchThreadID)
 
     uint usableID = _VisibleIDBuffer[id];
     GrassInput input = _InputBuffer[usableID];
+    float cut = _CutBuffer[usableID];
+
     
     // LoD
     float distanceFromCamera = distance(input.position, _CameraPositionWS);
@@ -161,6 +165,9 @@ void BendGrass (uint id : SV_DispatchThreadID)
     GrassOutput result;
     result.position = input.position;
     result.height = (bladeHeight + bladeHeightOffset * (xorshift128()*2-1)) * distanceFade;
+    if(cut != -1){
+        result.height *= 0.1f;
+    }
     result.width = (bladeWeight + bladeWeightOffset * (xorshift128()*2-1)) * distanceFade;
     result.quaternion = quatMultiply(qt,quatMultiply(q2,q1));
     result.fade = xorshift128() * distanceFade;
