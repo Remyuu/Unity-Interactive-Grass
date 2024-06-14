@@ -7,7 +7,7 @@
 2. Place the `GrassPainter.cs` script into the Editor folder of your project. This is necessary for the script to function properly in the Unity Editor.
 3. Attach the `GrassControl.cs` script to the `Grass Generator - Holder` object you created in Step 1.
 4. Select the object(s) where you want to generate grass.
-With the object(s) selected, go to the GrassControl component on your Grass Generator - Holder object and click the Generate Grass to Selected Objects button.
+With the object(s) selected, go to the GrassControl component on your `Grass Generator - Holder` object and click the Generate Grass to Selected Objects button.
 
 
 ## Snapshot
