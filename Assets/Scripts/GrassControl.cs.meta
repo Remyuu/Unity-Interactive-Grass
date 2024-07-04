@@ -1,12 +1,11 @@
 fileFormatVersion: 2
-guid: ce15015357ba740a8a7638fed31b6866
+guid: a990e7853b7624598872decf971ac4eb
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
   defaultReferences:
-  - shader: {fileID: 7200000, guid: 704296771288f4030b00dab04231d6a0, type: 3}
-  - bladeMaterial: {fileID: 2100000, guid: dc69b59112809435190f30d22d8812fb, type: 2}
-  - trampler: {instanceID: 0}
+  - shader: {fileID: 7200000, guid: 13eb75bd568a445c1ba686e2e7bcb1fd, type: 3}
+  - bladeMaterial: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

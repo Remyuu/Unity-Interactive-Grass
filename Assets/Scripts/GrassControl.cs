@@ -20,11 +20,17 @@ public class GrassControl : MonoBehaviour
     
     // 生草工具的面板数据存储
     [SerializeField, HideInInspector]
-    public int grassLayer = 0; // 默认为 "Default" Layer
+    public LayerMask grassLayer = 0; // 默认为 "Default" Layer
+    [SerializeField, HideInInspector]
+    public LayerMask hitMask = 1;
+    [SerializeField, HideInInspector]
+    public float brushSize = 4f;
     [SerializeField, HideInInspector]
     public int grassAmountToGenerate = 20000;
     [SerializeField, HideInInspector]
     public float generationDensity = 0.67f;
+    [SerializeField, HideInInspector]
+    bool m_fastMode;
     
     // 最终提交到Material的草最高数量，即CS->Material的Buffer大小，根据个人的系统修改，
         // Colin的代码中这里设置为有可能生成的草的总数量，我觉得是合理的。
@@ -242,10 +248,10 @@ public class GrassControl : MonoBehaviour
         {
             OnDisable();
         }
-        InitShader();
+        InitShader(true);
     }
     
-    void InitShader()
+    void InitShader(bool full)
     {
 #if UNITY_EDITOR
         SceneView.duringSceneGui += this.OnScene;
@@ -273,6 +279,13 @@ public class GrassControl : MonoBehaviour
             Debug.LogWarning("Missing Compute Shader/Material in grass Settings", this);
             return;
         }
+
+        if (m_MainCamera == null)
+        {
+            Debug.LogWarning("Missing Camera", this);
+            return;
+        }
+            
         
         blade = Blade;
         
@@ -375,6 +388,11 @@ public class GrassControl : MonoBehaviour
         {
             cutIDs[i] = -1;
         }
+        
+        // added for CS cull
+        Matrix4x4 v = m_MainCamera.worldToCameraMatrix;
+        Matrix4x4 p = m_MainCamera.projectionMatrix;
+        Matrix4x4 vp = p * v;
         // 初始化那些运行时不需要每一帧都修改的变量
         // Trample
         
@@ -394,7 +412,10 @@ public class GrassControl : MonoBehaviour
         m_ComputeShader.SetFloat("_MinFadeDist", minFadeDistance);
         m_ComputeShader.SetFloat("_MaxFadeDist", maxFadeDistance);
         
+        m_ComputeShader.SetMatrix("_VPMatrix", vp);// added for CS cull
+        
         m_Material.SetVector("_AABB",new Vector4(m_LocalBounds.center.x, m_LocalBounds.center.y, m_LocalBounds.center.z, 0f));
+        
 
         m_CutBuffer.SetData(cutIDs);
     }
@@ -626,12 +647,29 @@ public class GrassControl : MonoBehaviour
 
 
 
-    // If the pool capacity is reached then any items returned will be destroyed.
-    // We can control what the destroy behavior does, here we destroy the GameObject.
-    void OnDestroyPoolObject(ParticleSystem system)
+    // // If the pool capacity is reached then any items returned will be destroyed.
+    // // We can control what the destroy behavior does, here we destroy the GameObject.
+    // void OnDestroyPoolObject(ParticleSystem system)
+    // {
+    //     Destroy(system.gameObject);
+    // }
+    
+    public void Reset()
     {
-        Destroy(system.gameObject);
+        m_fastMode = false;
+        OnDisable();
+        InitShader(true);
     }
+
+    public void ResetFaster()
+    {
+        m_fastMode = true;
+        OnDisable();
+        InitShader(false);
+    }
+    
+    
+    
 }
     
     
