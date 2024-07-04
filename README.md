@@ -1,6 +1,13 @@
 # Unity-Interactive-Grass with Quad Tree
  Using DrawMeshInstancedIndirect Draw 100000+ Grass  
 
+## News
+
+URP-With-New-Tool-v1.0 Branch.
+
+- Draw Grass Tool
+- URP project
+
 ## Setup
 
 1. Create an empty object in your Unity scene. Name it `Grass Generator - Holder`.
@@ -11,7 +18,7 @@ With the object(s) selected, go to the GrassControl component on your `Grass Gen
 
 
 ## Snapshot
- 
+
 <img width="718" alt="image" src="https://github.com/Remyuu/Unity-Interactive-Grass/assets/64857501/fa43ea22-15f3-42be-b36b-b89714c4ac38">
 <img width="770" alt="image" src="https://github.com/Remyuu/Unity-Interactive-Grass/assets/64857501/2d97e67f-d2fa-41b4-8787-1add30e6ba20">
 <img width="656" alt="image" src="https://github.com/Remyuu/Unity-Interactive-Grass/assets/64857501/a33440b9-8233-4586-80ef-a573dde197d2">
