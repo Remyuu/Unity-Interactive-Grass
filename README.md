@@ -18,7 +18,7 @@ URP-With-New-Tool-v1.0 Branch.
    With the object(s) selected, go to the GrassControl component on your `Grass Generator - Holder` object and click the Generate Grass to Selected Objects button.
 
 
-## Snapshot
+##  Introduction
 
 <img width="718" alt="image" src="https://github.com/Remyuu/Unity-Interactive-Grass/assets/64857501/fa43ea22-15f3-42be-b36b-b89714c4ac38">
 <img width="770" alt="image" src="https://github.com/Remyuu/Unity-Interactive-Grass/assets/64857501/2d97e67f-d2fa-41b4-8787-1add30e6ba20">
