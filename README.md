@@ -2,6 +2,10 @@
 
  Using DrawMeshInstancedIndirect Draw 100000+ Grass  
 
+[https://remoooo.com/en/unity-instanted-grass/](EN blog)
+
+[https://remoooo.com/unity-instanted-grass/](CN blog)
+
 ## News
 
 URP-With-New-Tool-v1.0 Branch.
